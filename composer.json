@@ -1,22 +1,27 @@
 {
-  "name": "rootpd/nette-sentry",
-  "description": "Nette Sentry logger library",
+  "name": "bohacpetr/nette-sentry-legacy",
+  "description": "Legacy Nette Sentry logger library",
   "license": "MIT",
   "keywords": ["nette", "sentry", "errorlogger", "errors"],
   "authors": [
     {
       "name": "Peter Dulacka",
       "email": "dulacka@gmail.com"
+    },
+    {
+      "name": "Petr Bohac",
+      "email": "bohacpetr@bohyn.cz"
     }
   ],
+  "repositories": [{
+    "type": "composer",
+    "url": "http://repo.packagist.org/packages.json"
+  }],
   "type": "library",
   "require": {
-    "php": "^8.1",
-    "nette/di": "^3.0",
-    "nette/http": "^3.0",
-    "nette/security": "^3.0",
-    "sentry/sentry": "^4.0",
-    "tracy/tracy": "^2.4"
+    "php": ">=7.0",
+    "nette/nette": "^2.2.0",
+    "sentry/sentry": "1.11.0"
   },
   "require-dev": {
     "ninjify/nunjuck": "^0.3",
@@ -24,7 +29,7 @@
   },
   "autoload": {
     "psr-4": {
-      "Rootpd\\NetteSentry\\": "src"
+      "bohyn\\NetteSentryLegacy\\": "src"
     }
   },
   "config": {

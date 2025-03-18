@@ -2,170 +2,200 @@
 
 declare(strict_types=1);
 
-namespace Rootpd\NetteSentry;
+namespace bohyn\NetteSentryLegacy;
 
 use Nette\Http\Session;
 use Nette\Security\IIdentity;
 use Nette\Security\User;
-use Sentry\Integration\RequestIntegration;
-use Sentry\Severity;
-use Sentry\State\Scope;
+use Raven_Client;
 use Throwable;
 use Tracy\Debugger;
 use Tracy\Dumper;
-use Tracy\ILogger;
 use Tracy\Logger;
-use function Sentry\captureException;
-use function Sentry\captureMessage;
-use function Sentry\configureScope;
-use function Sentry\init;
 
 class SentryLogger extends Logger
 {
-    private ?User $user = null;
-    private ?Session $session = null;
+	/**
+	 * @var Raven_Client
+	 */
+	private $client;
 
-    private string $dsn;
-    private string $environment;
-    private array $userFields = [];
-    private array $sessionSections = [];
-    private array $priorityMapping = [];
-    private ?float $tracesSampleRate = null;
+	/**
+	 * @var User|null
+	 */
+	private $user = null;
 
-    public function register(string $dsn, string $environment)
-    {
-        $this->dsn = $dsn;
-        $this->environment = $environment;
+	/**
+	 * @var Session|null
+	 */
+	private $session = null;
 
-        init([
-            'dsn' => $this->dsn,
-            'environment' => $this->environment,
-            'attach_stacktrace' => true,
-            'default_integrations' => false,
-            'traces_sample_rate' => $this->tracesSampleRate,
-            'integrations' => [
-                new RequestIntegration(),
-            ],
-        ]);
+	/**
+	 * @var string
+	 */
+	private $dsn;
 
-        $this->email = & Debugger::$email;
-        $this->directory = Debugger::$logDirectory;
-    }
+	/**
+	 * @var string
+	 */
+	private $environment;
 
-    public function getDsn(): string
-    {
-        return $this->dsn;
-    }
+	/**
+	 * @var array
+	 */
+	private $userFields = [];
 
-    public function getEnvironment(): string
-    {
-        return $this->environment;
-    }
+	/**
+	 * @var array
+	 */
+	private $sessionSections = [];
 
-    public function setUser(User $user)
-    {
-        $this->user = $user;
-    }
+	/**
+	 * @var array
+	 */
+	private $priorityMapping = [];
 
-    public function setUserFields(array $userFields)
-    {
-        $this->userFields = $userFields;
-    }
+	/**
+	 * @var float|null
+	 */
+	private $tracesSampleRate = null;
 
-    public function setSessionSections(array $sessionSections)
-    {
-        $this->sessionSections = $sessionSections;
-    }
+	public function __construct()
+	{
+	}
 
-    public function setPriorityMapping(array $priorityMapping)
-    {
-        $this->priorityMapping = $priorityMapping;
-    }
 
-    public function setTracesSampleRate(float $tracesSampleRate)
-    {
-        $this->tracesSampleRate = $tracesSampleRate;
-    }
+	public function register(string $dsn, string $environment)
+	{
+		$this->dsn = $dsn;
+		$this->environment = $environment;
+		$this->client = new Raven_Client($dsn);
+		$this->email = & Debugger::$email;
+		$this->directory = Debugger::$logDirectory;
+	}
 
-    public function setSession(Session $session)
-    {
-        $this->session = $session;
-    }
+	public function getDsn(): string
+	{
+		return $this->dsn;
+	}
 
-    public function getIdentity(): ?IIdentity
-    {
-        return $this->user !== null && $this->user->isLoggedIn()
-            ? $this->user->getIdentity()
-            : null;
-    }
+	public function getEnvironment(): string
+	{
+		return $this->environment;
+	}
 
-    public function log($value, $priority = ILogger::INFO)
-    {
-        $response = parent::log($value, $priority);
-        $severity = $this->tracyPriorityToSentrySeverity($priority);
+	public function setUser(User $user)
+	{
+		$this->user = $user;
+	}
 
-        // if it's non-default severity, let's try configurable mapping
-        if (!$severity) {
-            $mappedSeverity = $this->priorityMapping[$priority] ?? null;
-            if ($mappedSeverity) {
-                $severity = new Severity((string) $mappedSeverity);
-            }
-        }
-        // if we still don't have severity, don't log anything
-        if (!$severity) {
-            return $response;
-        }
+	public function setUserFields(array $userFields)
+	{
+		$this->userFields = $userFields;
+	}
 
-        configureScope(function (Scope $scope) use ($severity) {
-            if (!$severity) {
-                return;
-            }
-            $scope->setLevel($severity);
-            if ($this->getIdentity() !== null) {
-                $userFields = [
-                    'id' => $this->getIdentity()->getId(),
-                ];
-                foreach ($this->userFields as $name) {
-                    $userFields[$name] = $this->getIdentity()->{$name} ?? null;
-                }
-                $scope->setUser($userFields);
-            }
-            if ($this->session) {
-                $data = [];
-                foreach ($this->sessionSections as $section) {
-                    foreach ($this->session->getSection($section)->getIterator() as $key => $val) {
-                        $data[$section][$key] = $val;
-                    }
-                }
-                $scope->setExtra('session', $data);
-            }
-        });
+	public function setSessionSections(array $sessionSections)
+	{
+		$this->sessionSections = $sessionSections;
+	}
 
-        if ($value instanceof Throwable) {
-            captureException($value);
-        } else {
-            captureMessage(is_string($value) ? $value : Dumper::toText($value));
-        }
+	public function setPriorityMapping(array $priorityMapping)
+	{
+		$this->priorityMapping = $priorityMapping;
+	}
 
-        return $response;
-    }
+	public function setTracesSampleRate(float $tracesSampleRate)
+	{
+		$this->tracesSampleRate = $tracesSampleRate;
+	}
 
-    private function tracyPriorityToSentrySeverity(string $priority): ?Severity
-    {
-        switch ($priority) {
-            case ILogger::DEBUG:
-                return Severity::debug();
-            case ILogger::INFO:
-                return Severity::info();
-            case ILogger::WARNING:
-                return Severity::warning();
-            case ILogger::ERROR:
-            case ILogger::EXCEPTION:
-                return Severity::error();
-            case ILogger::CRITICAL:
-                return Severity::fatal();
-            default:
-                return null;
-        }
-    }
+	public function setSession(Session $session)
+	{
+		$this->session = $session;
+	}
+
+	/**
+	 * @return IIdentity|null
+	 */
+	public function getIdentity()
+	{
+		return $this->user !== null && $this->user->isLoggedIn()
+			? $this->user->getIdentity()
+			: null;
+	}
+
+	/**
+	 * @param mixed $message
+	 * @param string $priority
+	 * @return void
+	 */
+	public function log($message, $priority = Logger::INFO)
+	{
+		parent::log($message, $priority);
+		$severity = $this->tracyPriorityToSentrySeverity($priority);
+
+		// if it's non-default severity, let's try configurable mapping
+		if (!$severity) {
+			$mappedSeverity = $this->priorityMapping[$priority] ?? null;
+			if ($mappedSeverity) {
+				$severity = $mappedSeverity;
+			}
+		}
+		// if we still don't have severity, don't log anything
+		if (!$severity) {
+			return;
+		}
+
+		if ($identity = $this->getIdentity()) {
+			$this->client->user_context(['eid' => $identity->getId()]);
+			$userFields = [];
+
+			foreach ($this->userFields as $name) {
+				$userFields[$name] = $this->getIdentity()->{$name} ?? null;
+			}
+
+			$this->client->user_context($userFields);
+		}
+
+		if ($this->session) {
+			$data = [];
+
+			foreach ($this->sessionSections as $section) {
+				foreach ($this->session->getSection($section)->getIterator() as $key => $val) {
+					$data[$section][$key] = $val;
+				}
+			}
+
+			$this->client->extra_context($data);
+		}
+
+		if ($message instanceof Throwable) {
+			$this->client->captureException($message);
+		} else {
+			$this->client->captureMessage(is_string($message) ? $message : Dumper::toText($message));
+		}
+	}
+
+	/**
+	 * @param string $priority
+	 * @return string|null
+	 */
+	private function tracyPriorityToSentrySeverity(string $priority)
+	{
+		switch ($priority) {
+			case Logger::DEBUG:
+				return Raven_Client::DEBUG;
+			case Logger::INFO:
+				return Raven_Client::INFO;
+			case Logger::WARNING:
+				return Raven_Client::WARNING;
+			case Logger::ERROR:
+			case Logger::EXCEPTION:
+				return Raven_Client::ERROR;
+			case Logger::CRITICAL:
+				return Raven_Client::FATAL;
+			default:
+				return null;
+		}
+	}
 }

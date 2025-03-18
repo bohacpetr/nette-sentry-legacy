@@ -1,6 +1,8 @@
-# Nette Sentry
+# Legacy Nette Sentry
 
-[![Build Status](https://app.travis-ci.com/rootpd/nette-sentry.svg?branch=master)](https://app.travis-ci.com/rootpd/nette-sentry)
+This is fork of `rootpd/nette-sentry` [link](https://github.com/rootpd/nette-sentry) supporting legacy `Nette 2.2`, `Sentry 1.11` and `PHP 7.0+`. Just in case you end up maintaining technical debt.
+
+___
 
 Tracy logger extension capable of logging messages and errors to Sentry.
 
@@ -11,7 +13,7 @@ Tracy logger extension capable of logging messages and errors to Sentry.
 Install package via Composer:
 
 ```
-composer require rootpd/nette-sentry
+composer require bohacpetr/nette-sentry-legacy
 ```
 
 ## Configuration
